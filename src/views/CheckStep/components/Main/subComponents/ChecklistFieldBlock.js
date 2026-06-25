@@ -1,7 +1,6 @@
 import React from "react";
 import styled from "styled-components";
 import { FiAlertCircle, FiCheckCircle, FiX } from "react-icons/fi";
-import { getValidationGuide } from "../../../../../utils/checklistValidator";
 import { theme } from "../../../../../styles/theme";
 
 const mobileBreakpoint = theme.media?.sizes?.mobile || "768px";
@@ -18,11 +17,6 @@ const FieldBlock = styled.div`
   }
 `;
 
-const InputPairRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-`;
 const DynamicInputPairRow = styled.div`
   display: grid;
   grid-template-columns: ${(props) => (props.$showBefore ? "1fr 1fr" : "1fr")};
@@ -101,16 +95,107 @@ const ClearButton = styled.button`
   }
 `;
 
-function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
-  // 💡 [변경] 자체 validateField를 제거하고 부모가 이미 연산해서 answers에 구워준 플래그를 가져옵니다.
+// 💡 [프롭스 확장] 부모의 전체 입력 이력 배열인 currentValues를 수혈받습니다.
+function ChecklistFieldBlock({
+  field,
+  fIdx,
+  cellData,
+  currentValues = [],
+  onValueChange,
+}) {
   const isBeforeError = cellData.before_fail === "Y";
   const isAfterError = cellData.after_fail === "Y";
-
-  // 만약 훅 데이터 구조에 메시지를 함께 구워두지 않았다면 디폴트 문구를 설정합니다.
-  const errMessage = cellData.after_message || "허용 편차 기준 초과";
-  const guideText = getValidationGuide(field.validation);
+  const errMessage = cellData.after_message || "확인 필요!";
 
   const showBefore = field.showBefore !== false;
+
+  // 💡 [실시간 수치 연산 장치] 그룹 편차 및 각종 규격을 다이나믹하게 판별
+  const checkHasError = (keyType) => {
+    if (keyType === "before") return isBeforeError;
+    if (keyType === "after" && isAfterError) return true;
+
+    const val = cellData.after;
+    if (val === "" || val === "-" || val === undefined || val === null)
+      return false;
+
+    const v = field.validation;
+    if (!v || v.type === "none") return false;
+
+    // ① 선택박스 불량어 검증
+    if (v.type === "textCheck" && field.type === "select") {
+      let rawFails = v.failValues || [];
+      if (typeof rawFails === "string") rawFails = rawFails.split(",");
+      const cleanSelected = String(val).trim();
+      const cleanFails = Array.isArray(rawFails)
+        ? rawFails.map((word) => String(word).trim())
+        : [];
+      if (cleanFails.includes(cleanSelected)) return true;
+    }
+
+    const numVal = Number(val);
+    if (isNaN(numVal)) return false;
+
+    // ② 최대/최소 범위 초과 체크
+    if (v.type === "range") {
+      const min = v.minRange ?? 0;
+      const max = v.maxRange ?? 0;
+      if (numVal < min || numVal > max) return true;
+    }
+
+    // ③ 최소 임계치 미달 체크
+    if (v.type === "min") {
+      const minLimit = v.minValue ?? 0;
+      if (numVal < minLimit) return true;
+    }
+
+    // 💡 [신설] ④ 실시간 다이나믹 그룹 편차(rangeDelta) 상호 역추적 계산기 가동!
+    if (v.type === "rangeDelta") {
+      const limitDelta = Number(v.allowedDelta || 0);
+      if (limitDelta <= 0) return false;
+
+      // 현재 점검 포인트 내 다른 형제 필드들의 After 값들을 전부 긁어모아 정밀 숫자 배열로 파싱
+      const validNumbers = currentValues
+        .map((cell) => cell?.after)
+        .filter(
+          (val) =>
+            val !== "" &&
+            val !== "-" &&
+            val !== undefined &&
+            val !== null &&
+            !isNaN(Number(val)),
+        )
+        .map((val) => Number(val));
+
+      // 데이터가 혼자만 입력된 게 아니라 비교군이 형성되었을 때 실시간 분석 작동
+      if (validNumbers.length > 1) {
+        const maxVal = Math.max(...validNumbers);
+        const minVal = Math.min(...validNumbers);
+        const currentDelta = maxVal - minVal;
+
+        // 그룹 최대치와 최소치의 격차가 빌더에서 선언한 허용 편차 한계선을 깨부수면 불량 확정
+        if (currentDelta > limitDelta) return true;
+      }
+    }
+
+    return false;
+  };
+
+  const isBeforeActiveError = checkHasError("before");
+  const isAfterActiveError = checkHasError("after");
+
+  // 우측 상단 메타 가이드 가독성 파서 보정
+  const parseGuideText = () => {
+    const v = field.validation;
+    if (!v || v.type === "none") return "자율 입력";
+    if (v.type === "range")
+      return `기준: ${v.minRange ?? 0} ~ ${v.maxRange ?? 0}`;
+    if (v.type === "rangeDelta") return `허용 편차: ±${v.allowedDelta ?? 0}`;
+    if (v.type === "min") return `최소 기준: ${v.minValue ?? 0} 이상`;
+    if (v.type === "textCheck") return "불량어 검증 항목";
+    return "";
+  };
+
+  const guideText = parseGuideText();
 
   const handleBlurCheck = (keyType, val) => {
     if (!val || val.trim() === "") {
@@ -119,10 +204,17 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
   };
 
   const renderInputField = (keyType, currentValue) => {
-    // 해당 타겟(before/after)에 맞는 에러 상태 설정
-    const currentHasError = keyType === "before" ? isBeforeError : isAfterError;
+    const currentHasError =
+      keyType === "before" ? isBeforeActiveError : isAfterActiveError;
 
     if (field.type === "select") {
+      const optionsArray = field.select_options
+        ? field.select_options
+            .split(",")
+            .map((o) => o.trim())
+            .filter(Boolean)
+        : ["정상", "이상"];
+
       return (
         <StyledSelect
           value={currentValue ?? ""}
@@ -130,7 +222,7 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
           onChange={(e) => onValueChange(fIdx, keyType, e.target.value)}
         >
           <option value="">선택</option>
-          {field.options?.map((opt) => (
+          {optionsArray.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
             </option>
@@ -141,7 +233,7 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
 
     return (
       <StyledInput
-        type={field.type === "number" ? "number" : "text"}
+        type="text"
         placeholder={keyType === "before" ? "측정치" : "최종치"}
         value={currentValue ?? ""}
         $isError={currentHasError}
@@ -153,7 +245,6 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
 
   return (
     <FieldBlock>
-      {/* 타이틀 및 스펙 표시 가이드라인 */}
       <div
         style={{
           display: "flex",
@@ -165,8 +256,11 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
         <span style={{ fontWeight: "700", color: "#334155" }}>{field.col}</span>
         <span
           style={{
-            color: field.validation ? "#0284c7" : "#64748b",
-            fontWeight: "500",
+            color:
+              field.validation && field.validation.type !== "none"
+                ? "#0284c7"
+                : "#64748b",
+            fontWeight: "700",
             fontSize: "11px",
           }}
         >
@@ -174,7 +268,6 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
         </span>
       </div>
 
-      {/* 작업 전 (Before) */}
       <DynamicInputPairRow $showBefore={showBefore}>
         {showBefore && (
           <InputWrapper>
@@ -195,9 +288,10 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
           </InputWrapper>
         )}
 
-        {/* 작업 후 (After) */}
         <InputWrapper>
-          <InputLabel style={{ color: isAfterError ? "#ef4444" : "#0284c7" }}>
+          <InputLabel
+            style={{ color: isAfterActiveError ? "#ef4444" : "#0284c7" }}
+          >
             작업 후 (After)
           </InputLabel>
           {renderInputField("after", cellData.after)}
@@ -212,8 +306,8 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
         </InputWrapper>
       </DynamicInputPairRow>
 
-      {/* 상태 하단 피드백 텍스트 */}
-      {isAfterError ? (
+      {/* 상태 하단 피드백 텍스트 실시간 최종 매핑 */}
+      {isAfterActiveError ? (
         <span
           style={{
             color: "#ef4444",
@@ -222,15 +316,21 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
             alignItems: "center",
             gap: "4px",
             marginTop: "2px",
-            fontWeight: "500",
+            fontWeight: "700",
           }}
         >
-          <FiAlertCircle size={12} /> {errMessage}
+          <FiAlertCircle size={12} />
+          {/* 💡 임시저장된 백엔드 메시지가 있다면 그걸 뿌리고, 실시간 편차 초과면 편차 에러 문구를 노출 */}
+          {isAfterError
+            ? errMessage
+            : field.validation?.type === "rangeDelta"
+              ? "그룹 간 허용 오차 편차 초과!"
+              : "기준 규격 미달 (경고)"}
         </span>
       ) : (
-        // 💡 값이 하나라도 존재하고, 에러가 없는 정상 스펙 충족 상태일 때
-        (cellData.before !== "" || cellData.after !== "") &&
-        field.validation && (
+        cellData.after !== "" &&
+        field.validation &&
+        field.validation.type !== "none" && (
           <span
             style={{
               color: "#10b981",
@@ -239,7 +339,7 @@ function ChecklistFieldBlock({ field, fIdx, cellData, onValueChange }) {
               alignItems: "center",
               gap: "4px",
               marginTop: "2px",
-              fontWeight: "500",
+              fontWeight: "700",
             }}
           >
             <FiCheckCircle size={12} /> 조건 충족

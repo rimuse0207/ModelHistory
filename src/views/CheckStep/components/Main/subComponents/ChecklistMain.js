@@ -15,8 +15,13 @@ function ChecklistMain({
 }) {
   if (!currentCategory) return null;
 
+  const currentIdx = categories.indexOf(currentCategory);
+  const isFirst = currentIdx === 0;
+  const isLast = currentIdx === categories.length - 1;
+
   return (
     <ContentArea>
+      {/* 문항 카드 컴포넌트 */}
       <QuestionCard
         currentCategory={currentCategory}
         answers={answers}
@@ -26,6 +31,7 @@ function ChecklistMain({
         }
       />
 
+      {/* 💡 [복구 완료] 클릭 함수 매핑 복원 및 깔끔한 제어권 복귀 */}
       <Controller
         onPrev={() => setCurrentCatIndex((prev) => Math.max(0, prev - 1))}
         onNext={() =>
@@ -39,8 +45,8 @@ function ChecklistMain({
           )
         }
         onReview={() => setViewMode("REVIEW")}
-        isFirst={categories.indexOf(currentCategory) === 0}
-        isLast={categories.indexOf(currentCategory) === categories.length - 1}
+        isFirst={isFirst}
+        isLast={isLast}
       />
     </ContentArea>
   );

@@ -1,11 +1,14 @@
 import React, { useState } from "react";
 import styled from "styled-components";
 import { NavLink as RouterNavLink } from "react-router-dom";
+import { useSelector } from "react-redux";
 
 const Navbar = () => {
+  const LoginInfo = useSelector(
+    (state) => state.Login_Info_Reducer_State.Login_Info,
+  );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // 모바일에서 메뉴 클릭 시 자동으로 드롭다운이 닫히도록 함수 추가
   const handleMenuClick = () => {
     setIsMobileMenuOpen(false);
   };
@@ -15,12 +18,25 @@ const Navbar = () => {
       <NavLogo to="/">Model Check System</NavLogo>
 
       <NavLinks $isOpen={isMobileMenuOpen}>
-        <StyledNavLink to="/" onClick={handleMenuClick}>
+        <StyledNavLink to="/Home" onClick={handleMenuClick}>
           이력 조회
         </StyledNavLink>
+
         <StyledNavLink to="/Write" onClick={handleMenuClick}>
           이력 작성
         </StyledNavLink>
+        {LoginInfo?.team === "IT팀" ||
+        LoginInfo?.position === "PL" ||
+        LoginInfo?.team === "TL" ||
+        LoginInfo?.team === "팀장" ||
+        LoginInfo?.team === "이사" ||
+        LoginInfo?.team === "상무" ? (
+          <StyledNavLink to="/Create" onClick={handleMenuClick}>
+            점검 항목 생성
+          </StyledNavLink>
+        ) : (
+          <></>
+        )}
       </NavLinks>
 
       <MenuToggleButton onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
@@ -33,10 +49,6 @@ const Navbar = () => {
 };
 
 export default Navbar;
-
-/* -------------------------------------------------------------------------- */
-/* Styled Components                               */
-/* -------------------------------------------------------------------------- */
 
 const NavContainer = styled.nav`
   display: flex;
@@ -56,7 +68,6 @@ const NavContainer = styled.nav`
   }
 `;
 
-// 로고도 클릭 시 대시보드로 이동하도록 Link 컴포넌트(RouterNavLink) 기반으로 변경
 const NavLogo = styled(RouterNavLink)`
   font-size: 20px;
   font-weight: 800;
@@ -86,7 +97,6 @@ const NavLinks = styled.div`
   }
 `;
 
-// 💡 핵심: styled.a 대신 styled(RouterNavLink)를 사용하여 라우터 기능과 스타일을 결합!
 const StyledNavLink = styled(RouterNavLink)`
   font-size: 14px;
   font-weight: 600;
@@ -101,7 +111,6 @@ const StyledNavLink = styled(RouterNavLink)`
     background-color: #f1f5f9;
   }
 
-  // react-router-dom의 NavLink는 현재 URL과 to가 일치하면 자동으로 .active 클래스를 붙여줍니다.
   &.active {
     color: #3b82f6;
     background-color: #eff6ff;

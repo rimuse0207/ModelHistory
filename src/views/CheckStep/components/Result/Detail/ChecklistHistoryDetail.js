@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { Request_Get_Axios } from "../../../../../API";
+import moment from "moment";
 
 const ChecklistHistoryDetail = ({ match }) => {
   const submissionId =
@@ -11,6 +12,7 @@ const ChecklistHistoryDetail = ({ match }) => {
   const [categories, setCategories] = useState([]);
   const [answers, setAnswers] = useState({});
   const [totalNgCount, setTotalNgCount] = useState(0);
+
   useEffect(() => {
     if (!submissionId) return;
 
@@ -20,12 +22,14 @@ const ChecklistHistoryDetail = ({ match }) => {
         const detailRes = await Request_Get_Axios(
           `/selectlist/history/detail/${submissionId}`,
         );
-        const { master, answers: loadedAnswers } = detailRes.data;
+
+        const { master, answers } = detailRes.data;
+
         setMasterInfo(master);
-        setAnswers(loadedAnswers);
+        setAnswers(answers);
 
         let ngCounter = 0;
-        Object.values(loadedAnswers).forEach((ans) => {
+        Object.values(answers).forEach((ans) => {
           ans.values?.forEach((v) => {
             if (v.after_fail === "Y") ngCounter++;
           });
@@ -33,14 +37,13 @@ const ChecklistHistoryDetail = ({ match }) => {
         setTotalNgCount(ngCounter);
 
         const masterRes = await Request_Get_Axios(
-          `/checklist/master/${master.modelNo}/${master.lineNo}`,
+          `/checklist/master/history/detail/${submissionId}`,
         );
 
-        const serverCategories = masterRes.data || [];
+        const serverCategories = masterRes.data.data || [];
         const processedCategories = serverCategories.map((cat) => ({
           ...cat,
           points: cat.points?.map((pt) => {
-            // 💡 [규격 통합] fields와 fields_json 유연하게 확보
             let rawFields = pt.fields || pt.fields_json || [];
 
             if (typeof rawFields === "string") {
@@ -51,22 +54,11 @@ const ChecklistHistoryDetail = ({ match }) => {
               }
             }
 
-            // 💡 [정상 복구] 1번째부터 5번째 필드까지 순회하며 정확하게 매핑
             const normalizedFields = Array.isArray(rawFields)
               ? rawFields.map((f) => {
-                  // 1. 만약 원본 데이터에 이미 true/false 성격의 showBefore가 있다면 우선 존중
-                  if (f.showBefore === true || f.showBefore === false) {
-                    return f;
-                  }
-
-                  // 2. 🎯 [정답 수정] prev_value가 'N'이나 'n'인 경우에만 '안 보여줌(false)' 처리합니다.
-                  // 그 외의 모든 정상적인 스펙 데이터(숫자나 문자 등)는 Before를 보여줍니다(true).
-                  const shouldHide =
-                    f.prev_value === "N" || f.prev_value === "n";
-
                   return {
                     ...f,
-                    showBefore: !shouldHide,
+                    showBefore: f.prev_value === "Y" || f.prev_value === "y",
                   };
                 })
               : [];
@@ -80,7 +72,7 @@ const ChecklistHistoryDetail = ({ match }) => {
 
         setCategories(processedCategories);
       } catch (err) {
-        console.error("상세 조회 오류", err);
+        console.error("🚨 상세 조회 통신 오류 발생:", err);
       } finally {
         setLoading(false);
       }
@@ -96,30 +88,53 @@ const ChecklistHistoryDetail = ({ match }) => {
   return (
     <WindowWindowContainer>
       <TopControlHeader>
-        <div className="left-brand">Model Check SYSTEM | 점검 이력 레포트</div>
+        <div className="left-brand">Model Check SYSTEM </div>
         <CloseWindowButton onClick={() => window.close()}>
           창 닫기
         </CloseWindowButton>
       </TopControlHeader>
 
       <MainDashboardBody>
+        {/* 상단 4구 종합 대시보드 요약 그리드 */}
         <DashboardSummaryGrid>
           <SummaryCard>
-            <label>관리 모델명</label>
-            <div className="value">{masterInfo.modelNo}</div>
+            <label>모델명</label>
+            <div className="value">{masterInfo.model_name}</div>
           </SummaryCard>
           <SummaryCard>
-            <label>시리얼 넘버</label>
-            <div className="value text-blue">Line {masterInfo.lineNo}</div>
+            <label>시리얼 넘버 (공정)</label>
+            <div className="value text-blue">
+              {masterInfo.serial_no} ({masterInfo.line_name})
+            </div>
           </SummaryCard>
           <SummaryCard>
-            <label>최종 검사자</label>
-            <div className="value">{masterInfo.writerName}</div>
+            <label>최종 작성자</label>
+            <div className="value">
+              {masterInfo.departmentName} {masterInfo.fullName}{" "}
+              {masterInfo.titleName}
+            </div>
           </SummaryCard>
           <SummaryCard $isNg={totalNgCount > 0}>
             <label>종합 판정 결과 (After 기준)</label>
             <div className="value">
               {totalNgCount > 0 ? `불량(NG) ${totalNgCount}건` : "정상 (PASS)"}
+            </div>
+          </SummaryCard>
+        </DashboardSummaryGrid>
+        <DashboardSummaryGrid>
+          <SummaryCard>
+            <label>작업 일자</label>
+            <div className="value text-blue">{`${moment(`${moment(masterInfo.work_date).format("YYYY-MM-DD")}T${masterInfo.work_time}`).format("YYYY. M. D. LTS")}`}</div>
+          </SummaryCard>
+          <SummaryCard>
+            <label>작업 담당자</label>
+            <div className="value">{masterInfo.worker_name}</div>
+          </SummaryCard>
+
+          <SummaryCard>
+            <label>작업 코멘트</label>
+            <div style={{ fontSize: "0.8em" }} className="value">
+              {masterInfo.summary_comments}
             </div>
           </SummaryCard>
         </DashboardSummaryGrid>
@@ -129,28 +144,23 @@ const ChecklistHistoryDetail = ({ match }) => {
             <b>마스터 등록 ID:</b> #{masterInfo.submissionId}
           </span>
           <span>
-            <b>최종 확정 일시:</b>{" "}
+            <b>최종 등록 일시:</b>{" "}
             {new Date(masterInfo.completedAt).toLocaleString()}
           </span>
         </TimeBar>
 
+        {/* 하단 세부 카테고리별 정밀 그리드 맵 명세 */}
         {categories.map((cat) => (
           <SectionCard key={cat.id}>
-            <SectionHeaderTitle>
-              카테고리 명세: {cat.category}
-            </SectionHeaderTitle>
+            <SectionHeaderTitle>카테고리 : {cat.category}</SectionHeaderTitle>
 
             {cat.points?.map((point) => {
               const answerKey = `${cat.id}_${point.pointId}`;
               const pointAnswer = answers[answerKey];
 
-              // 💡 [핵심 수정 1] 포인트 내 필드 중 '하나라도' Before 데이터가 유효한지 검사하여 일체화시킵니다.
-              const pointHasBefore = point.fields?.some((field, fIdx) => {
-                const cell = pointAnswer?.values?.[fIdx];
-                return cell && typeof cell.showBefore !== "undefined"
-                  ? cell.showBefore
-                  : field.showBefore;
-              });
+              const pointHasBefore = point.fields?.some(
+                (field) => field.showBefore,
+              );
 
               return (
                 <PointGroupBlock key={point.pointId}>
@@ -158,7 +168,6 @@ const ChecklistHistoryDetail = ({ match }) => {
                     📍 점검 포인트: {point.name}
                   </PointHeaderName>
 
-                  {/* 💡 [핵심 수정 2] 헤더 스타일도 포인트의 Before 유무 상태를 반영하도록 수정 */}
                   <GridTableHeader $showBefore={pointHasBefore}>
                     <div>검사 세부 필드</div>
                     <div>판정 기준 스펙</div>
@@ -175,14 +184,12 @@ const ChecklistHistoryDetail = ({ match }) => {
                   {point.fields?.map((field, fIdx) => {
                     const cell = pointAnswer?.values?.[fIdx];
                     const isAfterNg = cell?.after_fail === "Y";
-
-                    // 💡 [수정] 마스터 데이터에 세팅된 필드 고유의 showBefore 설정을 최우선으로 신뢰합니다.
                     const itemShowBefore = field.showBefore;
 
                     const v = field.validation;
                     let specGuide = "자율 입력";
                     if (v?.type === "delta" || v?.type === "rangeDelta")
-                      specGuide = `오차 기준 ±${v.allowedDelta}`;
+                      specGuide = `오차 기준 ±${v.allowedDelta || v.allowedDelta || 0}`;
                     if (v?.type === "min")
                       specGuide = `최소 ${v.minValue} 이상`;
                     if (v?.type === "range")
@@ -192,12 +199,11 @@ const ChecklistHistoryDetail = ({ match }) => {
                     return (
                       <GridTableRow
                         key={`${field.col}_${fIdx}`}
-                        $showBefore={pointHasBefore} // 부모 헤더 정렬용 (위 답변 유지)
+                        $showBefore={pointHasBefore}
                       >
                         <div className="field-name">🔹 {field.col}</div>
                         <div className="spec-guide">{specGuide}</div>
 
-                        {/* 💡 개별 필드의 showBefore 기준에 따라 Before 셀을 정확하게 스위칭 */}
                         {pointHasBefore &&
                           (itemShowBefore ? (
                             <DataValueBox $status="normal">
@@ -239,10 +245,6 @@ const ChecklistHistoryDetail = ({ match }) => {
 };
 
 export default ChecklistHistoryDetail;
-
-/* -------------------------------------------------------------------------- */
-/* styled-components 수정본                                                    */
-/* -------------------------------------------------------------------------- */
 
 const WindowWindowContainer = styled.div`
   background-color: #0f172a;

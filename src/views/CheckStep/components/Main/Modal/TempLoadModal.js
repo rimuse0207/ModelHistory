@@ -30,8 +30,8 @@ export function TempLoadModal({
         {/* 본문 영역 */}
         <ModalBody>
           <NoticeText>
-            현재 선택된 모델 및 라인에 누적된 임시저장 목록입니다. 복구할 기록을
-            선택해 주세요.
+            현재 선택된 모델에 누적된 임시저장 목록입니다. 복구할 기록을 선택해
+            주세요.
             <br />
             <span className="warning">
               ※ 불러오기 시 현재 작성 중이던 기존 입력값은 덮어씌워집니다.
@@ -55,7 +55,7 @@ export function TempLoadModal({
                     key={item.submissionId}
                     $isActive={isEditing}
                     onClick={() => {
-                      onRestore(item.submissionId);
+                      onRestore(item);
                       onClose(); // 복구 후 모달 자동 닫기
                     }}
                   >

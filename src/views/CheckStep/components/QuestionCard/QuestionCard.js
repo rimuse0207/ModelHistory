@@ -50,22 +50,27 @@ function QuestionCard({
   isSaved = false,
 }) {
   const catId = currentCategory.id;
-
   let missingFieldsCount = 0;
 
-  currentCategory.points.forEach((point) => {
+  // 1. 누락 항목 집계 파트
+  currentCategory.points?.forEach((point) => {
     const answerKey = `${catId}_${point.pointId}`;
     const currentValues = answers[answerKey]?.values || [];
 
-    point.fields.forEach((field, fIdx) => {
+    point.fields?.forEach((field, fIdx) => {
       const cellData = currentValues[fIdx] || { before: "", after: "" };
+
+      // 마스터 정보의 showBefore 가이드를 100% 신뢰
       const showBefore = field.showBefore !== false;
+
       const isAfterEmpty =
         !cellData.after || String(cellData.after).trim() === "";
       const isBeforeEmpty =
         showBefore && field.type !== "select"
           ? !cellData.before || String(cellData.before).trim() === ""
           : false;
+
+      // 규격 검증 종류가 'none'(자율입력)이 아닌 필수 기입 대상인데 비어있는 경우 집계
 
       if (isAfterEmpty || isBeforeEmpty) {
         missingFieldsCount++;
@@ -84,7 +89,6 @@ function QuestionCard({
         boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
       }}
     >
-      {/* 상단 뷰 제어 헤더 명세 배지 영역 */}
       <div
         style={{
           display: "flex",
@@ -139,13 +143,15 @@ function QuestionCard({
         </div>
       </div>
 
-      {/* 내부 실시간 대시보드 리스트 바디 */}
       <div style={{ marginTop: "12px" }}>
-        {currentCategory.points.map((point) => {
+        {currentCategory.points?.map((point) => {
           const answerKey = `${catId}_${point.pointId}`;
+          const fieldsCount = point.fields?.length || 0;
+
+          // 💡 [핵심 수정] 하드코딩(5)을 제거하고, 실제 백엔드가 내려준 가변 필드 수(fieldsCount)만큼 배열을 동적으로 밀어줍니다.
           const currentValues =
             answers[answerKey]?.values ||
-            Array(point.fields.length)
+            Array(fieldsCount)
               .fill(null)
               .map(() => ({
                 before: "",
@@ -164,12 +170,11 @@ function QuestionCard({
 
           return (
             <FlexibleRow key={point.pointId || point.name}>
-              {/* 좌측: 항목 텍스트 라벨 파트 */}
               <div
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  justifyContent: "center",
+                  justifycontent: "center",
                 }}
               >
                 <span
@@ -181,22 +186,10 @@ function QuestionCard({
                 >
                   {point.name}
                 </span>
-                <span
-                  style={{
-                    fontSize: "12px",
-                    color: "#94a3b8",
-                    marginTop: "4px",
-                  }}
-                >
-                  과거 이력:{" "}
-                  {point.fields
-                    .map((f) => `${f.col}(${f.prevValue || "-"})`)
-                    .join(", ")}
-                </span>
               </div>
 
               <FieldsContainer>
-                {point.fields.map((field, fIdx) => {
+                {point.fields?.map((field, fIdx) => {
                   const cellData = currentValues[fIdx] || {
                     before: "",
                     after: "",
@@ -211,10 +204,10 @@ function QuestionCard({
                       field={field}
                       fIdx={fIdx}
                       cellData={cellData}
+                      currentValues={currentValues}
                       isBeforeFail={cellData.before_fail === "Y"}
                       isAfterFail={cellData.after_fail === "Y"}
                       errorMessage={cellData.after_message || ""}
-                      // 💡 [핵심 수정] 하위 인풋 블록에서 올라오는 이벤트를 명확한 인자 구조로 매핑합니다.
                       onValueChange={(fieldIndex, keyType, value) => {
                         handleNestedValueChange(fieldIndex, keyType, value);
                       }}

@@ -2,10 +2,16 @@ import { useState, useMemo } from "react";
 import { validateField, getValidationGuide } from "../utils/checklistValidator";
 
 export const useReview = (categories = [], answers = {}) => {
-  // 1. 첫 카테고리 디폴트 오픈 상태 정의
-  const initialOpenKey = categories?.id || categories?.cat_id || "";
-  const [openSections, setOpenSections] = useState({
-    [initialOpenKey]: true,
+  const [openSections, setOpenSections] = useState(() => {
+    if (!categories || !Array.isArray(categories)) return {};
+
+    return categories.reduce((acc, list) => {
+      const currentCatId = list.id || list.cat_id || "";
+      if (currentCatId) {
+        acc[currentCatId] = true;
+      }
+      return acc;
+    }, {});
   });
 
   const toggleSection = (catId) => {
@@ -42,44 +48,62 @@ export const useReview = (categories = [], answers = {}) => {
     }
     return null;
   };
-
   /**
-   * 4. 단일 필드 검증 및 상태 평가 엔진
+   * 4. 단일 필드 검증 및 상태 평가 엔진 (수리 완료본)
    */
   const evaluateFieldStatus = (field, beforeStr, afterStr, allValues = []) => {
-    // 1. 기존 개별 밸리데이션 검사 실행
+    const isMissing =
+      !afterStr || afterStr === "-" || String(afterStr).trim() === "";
+
+    if (field.validation && isMissing) {
+      return {
+        isError: true,
+        isMissing: true,
+        message: "측정 데이터 누락",
+      };
+    }
+
     const singleResult = validateField(field, afterStr);
 
-    // 2. 만약 rangeDelta 타입일 경우, 주입받은 allValues를 이용해 묶음 편차 연산 수행
+    if (singleResult.isError) {
+      return {
+        isError: true,
+        isMissing: false,
+        message: singleResult.message,
+      };
+    }
+
     if (field.validation?.type === "rangeDelta" && allValues.length > 0) {
       const afterNums = allValues
-        .map((v) => parseFloat(v?.after))
+        .map((v) => {
+          const rawVal = v?.after !== undefined ? v.after : v;
+          return parseFloat(rawVal);
+        })
         .filter((n) => !isNaN(n));
-      if (afterNums.length > 0) {
+
+      if (afterNums.length > 1) {
         const maxA = Math.max(...afterNums);
         const minA = Math.min(...afterNums);
         const diff = maxA - minA;
+        const allowed = parseFloat(field.validation.allowedDelta || 0);
 
-        if (diff > field.validation.allowedDelta) {
+        if (diff > allowed) {
           return {
             isError: true,
             isMissing: false,
-            message: `최대 편차 초과 (${diff.toFixed(2)})`,
+            message: `최대 편차 초과 (오차: ${diff.toFixed(2)})`,
           };
         }
       }
     }
 
     return {
-      isError: singleResult.isError,
-      isMissing: !afterStr || afterStr === "-" || afterStr.trim() === "", // 공백 문자열 방어 추가
-      message: singleResult.message,
+      isError: false,
+      isMissing: isMissing,
+      message: "",
     };
   };
 
-  /**
-   * 5. useMemo 기반 종합 누락/에러 카운트 연산
-   */
   const summary = useMemo(() => {
     let missingCount = 0;
     let totalErrorCount = 0;
@@ -89,15 +113,14 @@ export const useReview = (categories = [], answers = {}) => {
       pointsArray.forEach((point) => {
         const savedPoint = getSavedPointData(cat, point);
         const fieldsArray = point.fields || point.fields_json || [];
-        const allValues = savedPoint?.values || []; // 💡 [추가] 5개 필드 전체 값 확보
+        const allValues = savedPoint?.values || [];
 
         fieldsArray.forEach((field, fIdx) => {
           const item = allValues[fIdx];
           const beforeStr =
-            field.type === "select" ? "N/A" : parseValue(item, "before") || "-";
-          const afterStr = parseValue(item, "after") || "-";
+            field.type === "select" ? "N/A" : parseValue(item, "before") || "";
+          const afterStr = parseValue(item, "after") || "";
 
-          // 💡 [수정] 4번째 인자로 allValues 배열을 전달하여 편차 에러까지 summary에 반영되게 만듭니다!
           const { isError, isMissing } = evaluateFieldStatus(
             field,
             beforeStr,
@@ -120,7 +143,7 @@ export const useReview = (categories = [], answers = {}) => {
     parseValue,
     getSavedPointData,
     evaluateFieldStatus,
-    getValidationGuide, // UI 헬퍼 연동 편의용
+    getValidationGuide,
     missingCount: summary.missingCount,
     totalErrorCount: summary.totalErrorCount,
   };

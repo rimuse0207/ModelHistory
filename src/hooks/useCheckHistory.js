@@ -2,83 +2,175 @@ import { useState, useEffect, useMemo } from "react";
 import { Request_Get_Axios } from "../API";
 
 export const useChecklistHistory = () => {
-  const [models, setModels] = useState([
-    { model_no: "DGP8761", label: "DGP8761" },
-  ]);
-  const [lines, setLines] = useState([
-    { line_no: "Line 01", line_name: "Line 01" },
-  ]);
+  const [basicOptionsList, setBasicOptionsList] = useState({
+    customers: [],
+    regions: [],
+    models: [],
+    serials: [],
+  });
+
+  const [companies, setCompanies] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [models, setModels] = useState([]);
+  const [lines, setLines] = useState([]);
   const [records, setRecords] = useState([]);
 
+  // 활성화된 선택 포인터 추적 상태 가젯
+  const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [selectedRegion, setSelectedRegion] = useState("");
   const [selectedModel, setSelectedModel] = useState(null);
-  const [selectedLine, setSelectedLine] = useState(null);
+  const [selectedSerial, setSelectedSerial] = useState(null);
 
-  // 💡 모델 검색용 상태 추가
+  // 검색 필터 상태 변수셋
   const [modelSearchTerm, setModelSearchTerm] = useState("");
+  const [globalSearchTerm, setGlobalSearchTerm] = useState("");
 
-  // 1. 초기 마운트 시 완료 데이터가 있는 모델 로드
   useEffect(() => {
-    getModelList();
+    getHistoryBasicData();
   }, []);
-  const getModelList = async () => {
-    const result = await Request_Get_Axios(`/selectlist/history/models`);
-    console.log(result);
-    if (result.status) {
-      setModels(result.data || [{ model_no: "DGP8761", label: "DGP8761" }]);
+
+  const getHistoryBasicData = async () => {
+    const request = await Request_Get_Axios("/selectlist/basicData");
+    if (request.status) {
+      setBasicOptionsList({
+        customers: request.data.customers || [],
+        regions: request.data.regions || [],
+        models: request.data.models || [],
+        serials: request.data.serials || [],
+      });
+      // 1단계 업체 리스트 채우기
+      setCompanies(request.data.customers || []);
     }
   };
 
-  // 2. 모델 선택 변경 시 라인 목록 로드
   useEffect(() => {
-    if (!selectedModel) return;
-    setLines([{ line_no: "Line 01", line_name: "Line 01" }]);
-    setRecords([]);
-    setSelectedLine(null);
-    getSerialNumberList();
-  }, [selectedModel]);
+    if (!selectedCustomer) {
+      setRegions([]);
+      setSelectedRegion("");
+      return;
+    }
 
-  const getSerialNumberList = async () => {
-    const result = await Request_Get_Axios(
-      `/selectlist/history/lines/${selectedModel}`,
+    const filtered = basicOptionsList.regions.filter(
+      (item) => item.customer_code === selectedCustomer,
     );
-    console.log(result);
-    if (result.status) {
-      setLines(result.data || [{ line_no: "Line 01", line_name: "Line 01" }]);
-    }
-  };
+    setRegions(filtered);
 
-  // 3. 라인 선택 변경 시 최종 등록 내역 로드
+    // 하위 서브트리 완전 클린업 청소
+    setSelectedRegion("");
+    setModels([]);
+    setSelectedModel(null);
+    setLines([]);
+    setSelectedSerial(null);
+    setRecords([]);
+  }, [selectedCustomer, basicOptionsList.regions]);
+
   useEffect(() => {
-    if (!selectedModel || !selectedLine) return;
+    if (!selectedRegion) {
+      setModels([]);
+      setSelectedModel(null);
+      return;
+    }
+    const filtered = basicOptionsList.models.filter(
+      (item) => item.regions_code === selectedRegion,
+    );
+    setModels(filtered);
+
+    // 하위 서브트리 초기화
+    setSelectedModel(null);
+    setLines([]);
+    setSelectedSerial(null);
+    setRecords([]);
+  }, [selectedRegion, basicOptionsList.models]);
+
+  useEffect(() => {
+    if (!selectedModel) {
+      setLines([]);
+      setSelectedSerial(null);
+      return;
+    }
+    const filtered = basicOptionsList.serials.filter(
+      (item) => item.model_no === selectedModel,
+    );
+    setLines(filtered);
+
+    setSelectedSerial(null);
+    setRecords([]);
+  }, [selectedModel, basicOptionsList.serials]);
+
+  useEffect(() => {
+    if (globalSearchTerm.trim().length > 0) return;
+    if (!selectedModel || !selectedSerial) return;
+
     setRecords([]);
     getResultList();
-  }, [selectedModel, selectedLine]);
+  }, [selectedModel, selectedSerial, globalSearchTerm]);
 
   const getResultList = async () => {
     const result = await Request_Get_Axios(
-      `/selectlist/history/records/${selectedModel}/${selectedLine}`,
+      `/selectlist/history/records/${selectedModel}/${selectedSerial}`,
     );
     if (result.status) {
       setRecords(result.data || []);
     }
   };
 
-  // 🔍 모델 검색 필터링 로직 (대소문자 구분 없음)
+  useEffect(() => {
+    const term = globalSearchTerm.trim();
+    if (!term) {
+      if (selectedModel && selectedSerial) getResultList();
+      else setRecords([]);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(() => {
+      getGlobalSearchResultList(term);
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [globalSearchTerm]);
+
+  const getGlobalSearchResultList = async (keyword) => {
+    try {
+      const result = await Request_Get_Axios(
+        `/selectlist/history/search-all?keyword=${encodeURIComponent(keyword)}`,
+      );
+
+      if (result && result.data) {
+        setRecords(result.data.data || result.data || []);
+      }
+    } catch (e) {
+      console.error("통합 검색 쿼리 연동 실패:", e);
+    }
+  };
+
   const filteredModels = useMemo(() => {
-    return models.filter((m) =>
-      m.model_no.toLowerCase().includes(modelSearchTerm.toLowerCase()),
-    );
+    return models.filter((m) => {
+      const targetName = m.model_name || m.name || m.id || "";
+      return targetName.toLowerCase().includes(modelSearchTerm.toLowerCase());
+    });
   }, [models, modelSearchTerm]);
 
   return {
+    companies,
+    regions,
     models: filteredModels,
     lines,
     records,
+    basicOptionsList,
+
+    selectedCustomer,
+    setSelectedCustomer,
+    selectedRegion,
+    setSelectedRegion,
+
     selectedModel,
     setSelectedModel,
-    selectedLine,
-    setSelectedLine,
+    selectedLine: selectedSerial,
+    setSelectedLine: setSelectedSerial,
+
     modelSearchTerm,
     setModelSearchTerm,
+    globalSearchTerm,
+    setGlobalSearchTerm,
   };
 };

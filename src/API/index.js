@@ -82,7 +82,6 @@ export const Request_Get_Axios = async (path, params) => {
         return true; // 모든 status를 성공으로 간주
       },
     });
-    console.log(Get_Axios);
     switch (Get_Axios.status) {
       // 데이터 성공
       case 200: {

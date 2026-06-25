@@ -1,4 +1,5 @@
 export const validateField = (field, afterStr) => {
+  // 1. 공백 검증 가드 (비어있으면 누락 카운터에서 잡으므로 여기선 통과)
   if (!afterStr || afterStr.trim() === "")
     return { isError: false, message: "" };
   if (!field.validation) return { isError: false, message: "" };
@@ -6,7 +7,10 @@ export const validateField = (field, afterStr) => {
   const { type, allowedDelta, minValue, minRange, maxRange, failValues } =
     field.validation;
 
-  // Case A: 문자열 검증
+  if (type === "none") {
+    return { isError: false, message: "" };
+  }
+  // Case A: 문자열/선택박스 전용 검증
   if (type === "textCheck" && failValues) {
     if (failValues.includes(afterStr.trim())) {
       return { isError: true, message: "제한 문구 매칭", type };
@@ -14,17 +18,24 @@ export const validateField = (field, afterStr) => {
     return { isError: false, message: "" };
   }
 
-  // 숫자형이 아닌데 아래 숫자 검증으로 넘어가는 것 방지
-  if (field.type !== "number") return { isError: false, message: "" };
+  // 💡 [추가 가드] rangeDelta(묶음 편차) 스펙인 경우 개별 필드 루프에서는 판정을 패스합니다 (그룹 연산에서 처리)
+  if (type === "rangeDelta" || type === "rangedelta") {
+    return { isError: false, message: "" };
+  }
 
+  // 🚨 [동기화 핵심 가드레일] 숫자형 스펙인데 숫자가 아닌 문자가 들어오는 케이스 원천 제압
   const cNum = parseFloat(afterStr);
-  const pNum = parseFloat(field.prevValue);
-  if (isNaN(cNum))
+  if (isNaN(cNum)) {
     return {
       isError: true,
-      message: "올바른 숫자가 아닙니다.",
+      message: "수치 입력란에 유효하지 않은 문자열(덤프)이 감지되었습니다.",
       type: "invalidNumber",
     };
+  }
+
+  // 숫자형이 아닌 필드가 아래 수치 연산으로 가는 것 최종 가드
+  if (field.type !== "number") return { isError: false, message: "" };
+  const pNum = parseFloat(field.prevValue);
 
   // Case B-1: 허용 오차 검증 (delta)
   if (type === "delta" && allowedDelta !== undefined && allowedDelta !== null) {
@@ -39,9 +50,14 @@ export const validateField = (field, afterStr) => {
   }
 
   // Case B-2: 최소 기준 검증 (min)
-  if (type === "min" && minRange !== undefined && minRange !== null) {
-    if (cNum < minRange) {
-      return { isError: true, message: `최소 기준(${minRange}) 미달`, type };
+  if (type === "min") {
+    const realMin =
+      minValue !== undefined && minValue !== null ? minValue : minRange;
+
+    if (realMin !== undefined && realMin !== null) {
+      if (cNum < realMin) {
+        return { isError: true, message: `최소 기준(${realMin}) 미달`, type };
+      }
     }
   }
 
@@ -59,13 +75,12 @@ export const validateField = (field, afterStr) => {
   return { isError: false, message: "" };
 };
 
-// 🛠️ 묶음 편차 검증 엔진 정상화 및 방어 코드 고도화 완료
+// 🛠️ 묶음 편차 검증 엔진 (전체 필드 간 편차 스크리닝 유지)
 export const validateGroupDelta = (
   fieldsArray,
   valuesArray,
   targetType = "after",
 ) => {
-  // 배열 검증 방어선 강화
   if (
     !fieldsArray ||
     !valuesArray ||
@@ -75,7 +90,6 @@ export const validateGroupDelta = (
     return { isError: false, message: "" };
   }
 
-  // 💡 [수정] 배열의 '첫 번째 요소'를 정확히 끄집어냅니다.
   const firstField = fieldsArray[0];
   if (!firstField || !firstField.validation)
     return { isError: false, message: "" };
@@ -88,12 +102,10 @@ export const validateGroupDelta = (
   const allowedDelta =
     validationSpec.allowedDelta ?? validationSpec.allowed_delta;
 
-  // 💡 [수정] 대소문자 공백 완전 차단 무력화 연산
   const normalizedType = String(type || "")
     .trim()
     .toLowerCase();
 
-  // rangeDelta와 delta 모두 유연하게 판정 스코프에 포함
   if (normalizedType !== "rangedelta" && normalizedType !== "delta") {
     return { isError: false, message: "" };
   }
@@ -102,12 +114,10 @@ export const validateGroupDelta = (
     return { isError: false, message: "" };
   }
 
-  // 5개 필드의 실제 입력값 수집 및 정제
   const nums = valuesArray
     .map((v) => parseFloat(v?.[targetType]))
     .filter((num) => !isNaN(num));
 
-  // 💡 최소 2개 이상의 값이 들어왔을 때부터 편차 검증을 시작하도록 신뢰성 확보
   if (nums.length >= 2) {
     const maxVal = Math.max(...nums);
     const minVal = Math.min(...nums);
@@ -116,7 +126,7 @@ export const validateGroupDelta = (
     if (diff > parseFloat(allowedDelta)) {
       return {
         isError: true,
-        message: `전체 필드 간 최대 편차 초과 (현재 편차: ${diff.toFixed(2)} / 기준 제한: ${allowedDelta})`,
+        message: `최대 편차 초과 (현재: ${diff.toFixed(2)} / 기준: ${allowedDelta})`,
       };
     }
   }
@@ -124,6 +134,7 @@ export const validateGroupDelta = (
   return { isError: false, message: "" };
 };
 
+// 📊 전체 카테고리 순회 검증 엔진 (ReviewPage 최종 서브밋 전수 분석용)
 export const validateFields = (categories, answers) => {
   let hasError = false;
   let errorCount = 0;
@@ -134,7 +145,7 @@ export const validateFields = (categories, answers) => {
     pointsArray.forEach((point) => {
       const answerKey = `${cat.id}_${point.pointId}`;
       const savedPoint = answers[answerKey];
-      const fieldsArray = point.fields || point.fields_json || []; // fields_json 예외 대응 추가
+      const fieldsArray = point.fields || point.fields_json || [];
       const valuesArray = savedPoint?.values || [];
 
       const hasBeforeField = fieldsArray.some((f) => f.showBefore !== false);
@@ -170,6 +181,7 @@ export const validateFields = (categories, answers) => {
       fieldsArray.forEach((field, fIdx) => {
         const cellData = valuesArray[fIdx];
 
+        // 💡 실시간 갱신된 단일 셀에 문자가 박혀있으면 여기서 에러 카운터 집계!
         const { isError: singleError, message } = validateField(
           field,
           cellData?.after,
@@ -189,6 +201,7 @@ export const validateFields = (categories, answers) => {
   return { hasError, errorCount, errorItems };
 };
 
+// 📝 항목 누락 전수 스크리닝 (자율입력 포함)
 export const checkCategoryIncomplete = (cat, currentAnswers) => {
   let missingCount = 0;
   if (!cat || !cat.points) return { isIncomplete: false, missingCount };
@@ -196,7 +209,7 @@ export const checkCategoryIncomplete = (cat, currentAnswers) => {
   cat.points.forEach((point) => {
     const answerKey = `${cat.id}_${point.pointId}`;
     const savedPoint = currentAnswers[answerKey];
-    const fieldsArray = point.fields || point.fields_json || []; // fields_json 대응 추가
+    const fieldsArray = point.fields || point.fields_json || [];
 
     fieldsArray.forEach((field, fIdx) => {
       const cellData = savedPoint?.values?.[fIdx];
@@ -219,13 +232,15 @@ export const checkCategoryIncomplete = (cat, currentAnswers) => {
   return { isIncomplete: missingCount > 0, missingCount };
 };
 
+// 💡 스펙 가이드 구문 파서 명세 동기화
 export const getValidationGuide = (validation) => {
   if (!validation) return "자율 입력";
 
   const type =
     validation.type ?? validation.validation_type ?? validation.validationType;
   const allowedDelta = validation.allowedDelta ?? validation.allowed_delta;
-  const minValue = validation.minRange ?? validation.minRange;
+
+  const minValue = validation.minValue ?? validation.minRange;
   const minRange = validation.minRange ?? validation.min_range;
   const maxRange = validation.maxRange ?? validation.max_range;
 

@@ -8,7 +8,6 @@ function ChecklistSidebar({
   setCurrentCatIndex,
   answers,
 }) {
-  console.log(categories);
   return (
     <NavSidebar>
       {categories.map((cat, idx) => {

@@ -51,9 +51,6 @@ export function useAutoSave({
           if (response.status) {
             setSubmissionId(response.data.submissionId);
             setLastSavedAnswersStr(currentAnswersStr);
-            console.log(
-              `[자동 저장 완료] 변경사항이 DB에 임시 저장되었습니다.`,
-            );
           }
         } catch (e) {
           console.error("자동 임시 저장 실패:", e);
