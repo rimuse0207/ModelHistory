@@ -139,9 +139,14 @@ export function useBuilderContext() {
       { name: name },
     );
     if (request.status) {
-      const newComp = { id: `${request.data}`, customer_name: name };
+      const newComp = { customer_code: `${request.data}`, customer_name: name };
       setCustomers([...customers, newComp]);
-      setSelectedCustomer(newComp.id);
+      setSelectedCustomer(newComp.customer_code);
+      toast.show({
+        title: `고객사를 추가하였습니다.`,
+        successCheck: true,
+        duration: 3000,
+      });
     }
   };
 
@@ -151,9 +156,14 @@ export function useBuilderContext() {
       { name: name, parentId },
     );
     if (request.status) {
-      const newReg = { id: `${request.data}`, regions_name: name };
+      const newReg = { regions_code: `${request.data}`, regions_name: name };
       setRegions([...regions, newReg]);
-      setSelectedRegion(newReg.id);
+      setSelectedRegion(newReg.regions_code);
+      toast.show({
+        title: `지역을 추가하였습니다.`,
+        successCheck: true,
+        duration: 3000,
+      });
     }
   };
 
