@@ -27,10 +27,10 @@ const Navbar = () => {
         </StyledNavLink>
         {LoginInfo?.team === "IT팀" ||
         LoginInfo?.position === "PL" ||
-        LoginInfo?.team === "TL" ||
-        LoginInfo?.team === "팀장" ||
-        LoginInfo?.team === "이사" ||
-        LoginInfo?.team === "상무" ? (
+        LoginInfo?.position === "TL" ||
+        LoginInfo?.position === "팀장" ||
+        LoginInfo?.position === "이사" ||
+        LoginInfo?.position === "상무" ? (
           <StyledNavLink to="/Create" onClick={handleMenuClick}>
             점검 항목 생성
           </StyledNavLink>
