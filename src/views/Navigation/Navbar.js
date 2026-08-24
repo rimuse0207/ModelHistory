@@ -30,7 +30,10 @@ const Navbar = () => {
         LoginInfo?.position === "TL" ||
         LoginInfo?.position === "팀장" ||
         LoginInfo?.position === "이사" ||
-        LoginInfo?.position === "상무" ? (
+        LoginInfo?.position === "상무" ||
+        LoginInfo?.id === "hsseo@dhk.co.kr" ||
+        LoginInfo?.id === "sgpark@dhk.co.kr" ||
+        LoginInfo?.id === "yrkim1@dhk.co.kr" ? (
           <StyledNavLink to="/Create" onClick={handleMenuClick}>
             점검 항목 생성
           </StyledNavLink>
