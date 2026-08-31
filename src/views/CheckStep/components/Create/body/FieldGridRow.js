@@ -75,14 +75,14 @@ function FieldGridRow({ field, cIdx, pIdx, fIdx, ctx }) {
             {isSelectType || isTextType ? (
               <>
                 <option value="textCheck">텍스트 불량 매칭 검증</option>
-                <option value="none">자율 입력 항목</option>
+                <option value="none">자율 입력(검증X)</option>
               </>
             ) : (
               <>
-                <option value="range">최대/최소 바운더리(range)</option>
+                <option value="range">최대/최소 범위(range)</option>
                 <option value="rangeDelta">실시간 그룹 편차 검증</option>
-                <option value="min">최소 임계치 필터(min)</option>
-                <option value="none">자율 입력 항목</option>
+                <option value="min">최소값 검증(min)</option>
+                <option value="none">자율 입력(검증X)</option>
               </>
             )}
           </S.GridSelect>

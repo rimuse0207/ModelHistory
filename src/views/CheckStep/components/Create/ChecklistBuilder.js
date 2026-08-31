@@ -390,9 +390,6 @@ function ChecklistBuilder() {
           onClose={() => ctx.setIsCopyModalOpen(false)}
           ctx={ctx}
         />
-        {/* =========================================================
-            🆕 계층형 인프라 독점 차단 제어 모달 주입
-           ========================================================= */}
         <ChecklistMasterModal
           mode={modalMode}
           isOpen={isModalOpen}

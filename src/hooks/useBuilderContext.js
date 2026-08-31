@@ -441,11 +441,19 @@ export function useBuilderContext() {
       });
 
     const currentLine = serials.find((s) => s.serial_no === selectedSerial);
+
     const sanitizedCategories = JSON.parse(JSON.stringify(categories));
 
-    sanitizedCategories.forEach((cat) => {
-      cat.points?.forEach((pt) => {
-        pt.fields?.forEach((fld) => {
+    sanitizedCategories.forEach((cat, cIdx) => {
+      cat.display_order = cIdx + 1;
+
+      cat.points?.forEach((pt, pIdx) => {
+        pt.display_order = pIdx + 1;
+
+        pt.fields?.forEach((fld, fIdx) => {
+          fld.display_order = fIdx + 1;
+
+          // 기존 숫자 정제 로직 유지
           if (fld.type === "number" && fld.validation) {
             const v = fld.validation;
             if (v.allowedDelta !== undefined)
@@ -482,6 +490,7 @@ export function useBuilderContext() {
         templateTree: sanitizedCategories,
       },
     );
+
     if (response.status) {
       toast.show({
         title: `기록 점검항목이 저장 되었습니다.`,
