@@ -34,7 +34,7 @@ const Navbar = () => {
         LoginInfo?.id === "hsseo@dhk.co.kr" ||
         LoginInfo?.id === "sgpark@dhk.co.kr" ||
         LoginInfo?.id === "yrkim1@dhk.co.kr" ? (
-          <StyledNavLink to="/Create" onClick={handleMenuClick}>
+          <StyledNavLink to="/create" onClick={handleMenuClick}>
             점검 항목 생성
           </StyledNavLink>
         ) : (

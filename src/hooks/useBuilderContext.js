@@ -28,6 +28,8 @@ export function useBuilderContext() {
   const [copyTargetSerial, setCopyTargetSerial] = useState("");
   const [copyTargetSerials, setCopyTargetSerials] = useState([]);
 
+  const [isMultiSaveModalOpen, setIsMultiSaveModalOpen] = useState(false);
+
   useEffect(() => {
     getBasicData();
   }, []);
@@ -432,7 +434,97 @@ export function useBuilderContext() {
     }
   };
 
-  const handleSaveMasterTemplate = async () => {
+  // const handleSaveMasterTemplate = async () => {
+  //   if (!selectedModel || !selectedSerial)
+  //     return toast.show({
+  //       title: `모델과 시리얼 넘버가 선택 되지 않았습니다.`,
+  //       successCheck: false,
+  //       duration: 3000,
+  //     });
+
+  //   const currentLine = serials.find((s) => s.serial_no === selectedSerial);
+
+  //   const sanitizedCategories = JSON.parse(JSON.stringify(categories));
+
+  //   sanitizedCategories.forEach((cat, cIdx) => {
+  //     cat.display_order = cIdx + 1;
+
+  //     cat.points?.forEach((pt, pIdx) => {
+  //       pt.display_order = pIdx + 1;
+
+  //       pt.fields?.forEach((fld, fIdx) => {
+  //         fld.display_order = fIdx + 1;
+
+  //         // 기존 숫자 정제 로직 유지
+  //         if (fld.type === "number" && fld.validation) {
+  //           const v = fld.validation;
+  //           if (v.allowedDelta !== undefined)
+  //             v.allowedDelta =
+  //               v.allowedDelta === "" || v.allowedDelta === "-"
+  //                 ? 0
+  //                 : Number(v.allowedDelta);
+  //           if (v.minValue !== undefined)
+  //             v.minValue =
+  //               v.minValue === "" || v.minValue === "-"
+  //                 ? 0
+  //                 : Number(v.minValue);
+  //           if (v.minRange !== undefined)
+  //             v.minRange =
+  //               v.minRange === "" || v.minRange === "-"
+  //                 ? 0
+  //                 : Number(v.minRange);
+  //           if (v.maxRange !== undefined)
+  //             v.maxRange =
+  //               v.maxRange === "" || v.maxRange === "-"
+  //                 ? 0
+  //                 : Number(v.maxRange);
+  //         }
+  //       });
+  //     });
+  //   });
+
+  //   const response = await Request_Post_Axios(
+  //     `/checklist/master/save-template`,
+  //     {
+  //       modelNo: selectedModel,
+  //       serialNo: selectedSerial,
+  //       lineLabel: currentLine ? currentLine.line_label : lineLabelInput,
+  //       templateTree: sanitizedCategories,
+  //     },
+  //   );
+
+  //   if (response.status) {
+  //     toast.show({
+  //       title: `기록 점검항목이 저장 되었습니다.`,
+  //       successCheck: true,
+  //       duration: 3000,
+  //     });
+  //   }
+  // };
+
+  const onExecuteTemplateCopy = async (targetModel, targetSerial) => {
+    const res = await Request_Get_Axios(
+      `checklist/master/${targetModel}/${targetSerial}`,
+    );
+
+    if (res.status && res.data.data.length > 0) {
+      setCategories(res.data.data);
+
+      toast.show({
+        title: `타 공정 장비의 점검 항목이 복사되었습니다! 최종 반영을 위해 우측 상단 [점검 항목 최종 저장] 버튼을 반드시 눌러주세요.`,
+        successCheck: true,
+        duration: 3000,
+      });
+    } else {
+      toast.show({
+        title: `선택한 장비에 점검 항목 정보가 존재하지 않습니다.`,
+        successCheck: false,
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleSaveMasterTemplate = async (additionalTargets = []) => {
     if (!selectedModel || !selectedSerial)
       return toast.show({
         title: `모델과 시리얼 넘버가 선택 되지 않았습니다.`,
@@ -441,19 +533,14 @@ export function useBuilderContext() {
       });
 
     const currentLine = serials.find((s) => s.serial_no === selectedSerial);
-
     const sanitizedCategories = JSON.parse(JSON.stringify(categories));
 
     sanitizedCategories.forEach((cat, cIdx) => {
       cat.display_order = cIdx + 1;
-
       cat.points?.forEach((pt, pIdx) => {
         pt.display_order = pIdx + 1;
-
         pt.fields?.forEach((fld, fIdx) => {
           fld.display_order = fIdx + 1;
-
-          // 기존 숫자 정제 로직 유지
           if (fld.type === "number" && fld.validation) {
             const v = fld.validation;
             if (v.allowedDelta !== undefined)
@@ -481,41 +568,37 @@ export function useBuilderContext() {
       });
     });
 
-    const response = await Request_Post_Axios(
-      `/checklist/master/save-template`,
+    // 💡 1. 현재 작업 중인 메인 타겟
+    const targetsToSave = [
       {
         modelNo: selectedModel,
         serialNo: selectedSerial,
         lineLabel: currentLine ? currentLine.line_label : lineLabelInput,
-        templateTree: sanitizedCategories,
       },
-    );
+    ];
 
-    if (response.status) {
-      toast.show({
-        title: `기록 점검항목이 저장 되었습니다.`,
-        successCheck: true,
-        duration: 3000,
-      });
+    // 💡 2. 모달에서 선택한 추가 타겟 병합
+    if (additionalTargets && additionalTargets.length > 0) {
+      targetsToSave.push(...additionalTargets);
     }
-  };
 
-  const onExecuteTemplateCopy = async (targetModel, targetSerial) => {
-    const res = await Request_Get_Axios(
-      `checklist/master/${targetModel}/${targetSerial}`,
-    );
-
-    if (res.status && res.data.data.length > 0) {
-      setCategories(res.data.data);
-
+    try {
+      for (const target of targetsToSave) {
+        await Request_Post_Axios(`/checklist/master/save-template`, {
+          modelNo: target.modelNo,
+          serialNo: target.serialNo,
+          lineLabel: target.lineLabel,
+          templateTree: sanitizedCategories,
+        });
+      }
       toast.show({
-        title: `타 공정 장비의 점검 항목이 복사되었습니다! 최종 반영을 위해 우측 상단 [점검 항목 최종 저장] 버튼을 반드시 눌러주세요.`,
+        title: `총 ${targetsToSave.length}대 장비에 점검항목이 동시 저장 되었습니다.`,
         successCheck: true,
         duration: 3000,
       });
-    } else {
+    } catch (e) {
       toast.show({
-        title: `선택한 장비에 점검 항목 정보가 존재하지 않습니다.`,
+        title: `저장 중 오류가 발생했습니다.`,
         successCheck: false,
         duration: 3000,
       });
@@ -568,5 +651,8 @@ export function useBuilderContext() {
     updateFieldMeta,
     handleLoadTargetTemplate,
     handleSaveMasterTemplate,
+
+    isMultiSaveModalOpen,
+    setIsMultiSaveModalOpen,
   };
 }

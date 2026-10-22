@@ -23,6 +23,7 @@ import Navbar from "../../../Navigation/Navbar";
 import FieldGridRow from "./body/FieldGridRow";
 import ChecklistMasterModal from "./modal/ChecklistMasterModal"; // 🆕 새로 쪼갠 계층모달 탑재
 import ChecklistCopyModal from "./modal/ChecklistCopyModal";
+import ChecklistMultiSaveModal from "./modal/ChecklistMultiSaveModal";
 
 function ChecklistBuilder() {
   const ctx = useBuilderContext();
@@ -248,7 +249,7 @@ function ChecklistBuilder() {
                 <FiCopy /> 타 장비 장비 점검 복사
               </S.CopyLoadButton>
               <S.SaveButton
-                onClick={ctx.handleSaveMasterTemplate}
+                onClick={() => ctx.setIsMultiSaveModalOpen(true)}
                 disabled={!ctx.selectedSerial}
               >
                 <FiSave /> 점검 항목 최종 저장
@@ -394,6 +395,11 @@ function ChecklistBuilder() {
           mode={modalMode}
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
+          ctx={ctx}
+        />
+        <ChecklistMultiSaveModal
+          isOpen={ctx.isMultiSaveModalOpen}
+          onClose={() => ctx.setIsMultiSaveModalOpen(false)}
           ctx={ctx}
         />
       </S.BuilderContainer>
